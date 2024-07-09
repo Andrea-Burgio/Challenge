@@ -5,8 +5,12 @@ import static org.junit.Assert.fail;
 
 import com.db.awmd.challenge.domain.Account;
 import com.db.awmd.challenge.exception.DuplicateAccountIdException;
+import com.db.awmd.challenge.exception.InsufficientBalanceException;
+import com.db.awmd.challenge.exception.InvalidTransferAmountException;
 import com.db.awmd.challenge.service.AccountsService;
 import java.math.BigDecimal;
+
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +23,11 @@ public class AccountsServiceTest {
 
   @Autowired
   private AccountsService accountsService;
+
+  @Before
+  public void resetAccounts() {
+   accountsService.clearAccounts();
+  }
 
   @Test
   public void addAccount() throws Exception {
@@ -41,6 +50,48 @@ public class AccountsServiceTest {
     } catch (DuplicateAccountIdException ex) {
       assertThat(ex.getMessage()).isEqualTo("Account id " + uniqueId + " already exists!");
     }
+  }
 
+  @Test
+  public void moneyTransfer_positiveTransfer() throws Exception{
+    Account accountFrom = new Account("1");
+    Account accountTo = new Account("2");
+    accountFrom.setBalance(BigDecimal.valueOf(150));
+
+    accountsService.createAccount(accountFrom);
+    accountsService.createAccount(accountTo);
+
+    accountsService.moneyTransfer("1", "2", BigDecimal.valueOf(100));
+    assertThat(accountFrom.getBalance()).isEqualTo((BigDecimal.valueOf(50)));
+    assertThat(accountTo.getBalance()).isEqualTo((BigDecimal.valueOf(100)));
+  }
+
+  @Test
+  public void moneyTransfer_negativeTransfer() throws Exception{
+    Account accountFrom = new Account("1");
+    Account accountTo = new Account("2");
+
+    try {
+      accountFrom.setBalance(BigDecimal.valueOf(150));
+      accountsService.createAccount(accountFrom);
+      accountsService.createAccount(accountTo);
+      accountsService.moneyTransfer("1", "2", BigDecimal.valueOf(-5)); //invalid amount
+    } catch (InvalidTransferAmountException e){
+      assertThat(e.getMessage()).isEqualTo("Transfer amount must be positive");
+    }
+  }
+
+  @Test
+  public void moneyTransfer_negativeBalance() throws Exception{
+    Account accountFrom = new Account("1");
+    Account accountTo = new Account("2");
+    try {
+      accountFrom.setBalance(BigDecimal.valueOf(150));  //insufficient balance
+      accountsService.createAccount(accountFrom);
+      accountsService.createAccount(accountTo);
+      accountsService.moneyTransfer("1", "2", BigDecimal.valueOf(200)); //invalid result: 150-200=-50
+    } catch (InsufficientBalanceException e){
+      assertThat(e.getMessage()).isEqualTo("Insufficient balance in account " + accountFrom.getAccountId());
+    }
   }
 }

@@ -1,9 +1,13 @@
 package com.db.awmd.challenge.web;
 
-import com.db.awmd.challenge.domain.Account;
+import com.db.awmd.challenge.domain.*;
 import com.db.awmd.challenge.exception.DuplicateAccountIdException;
+import com.db.awmd.challenge.exception.InsufficientBalanceException;
+import com.db.awmd.challenge.exception.InvalidTransferAmountException;
 import com.db.awmd.challenge.service.AccountsService;
 import javax.validation.Valid;
+
+import com.db.awmd.challenge.service.NotificationService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -23,8 +27,9 @@ public class AccountsController {
 
   private final AccountsService accountsService;
 
+
   @Autowired
-  public AccountsController(AccountsService accountsService) {
+  public AccountsController(AccountsService accountsService, NotificationService notificationService) {
     this.accountsService = accountsService;
   }
 
@@ -33,7 +38,7 @@ public class AccountsController {
     log.info("Creating account {}", account);
 
     try {
-    this.accountsService.createAccount(account);
+      this.accountsService.createAccount(account);
     } catch (DuplicateAccountIdException daie) {
       return new ResponseEntity<>(daie.getMessage(), HttpStatus.BAD_REQUEST);
     }
@@ -47,4 +52,16 @@ public class AccountsController {
     return this.accountsService.getAccount(accountId);
   }
 
+  @PostMapping("/transfer")
+  public ResponseEntity<String> moneyTransfer(@RequestBody TransferRequestDTO request) {
+    try {
+      accountsService.moneyTransfer(request.getAccountFromId(), request.getAccountToId(), request.getAmount());
+      return new ResponseEntity<>("Transfer successful", HttpStatus.OK);
+    } catch (InvalidTransferAmountException e) {
+      return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+    catch (InsufficientBalanceException e){
+      return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+  }
 }

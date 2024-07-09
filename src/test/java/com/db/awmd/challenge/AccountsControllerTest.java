@@ -8,8 +8,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
 import com.db.awmd.challenge.domain.Account;
+import com.db.awmd.challenge.domain.TransferRequestDTO;
+import com.db.awmd.challenge.exception.InsufficientBalanceException;
 import com.db.awmd.challenge.service.AccountsService;
 import java.math.BigDecimal;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -101,4 +105,74 @@ public class AccountsControllerTest {
       .andExpect(
         content().string("{\"accountId\":\"" + uniqueAccountId + "\",\"balance\":123.45}"));
   }
+
+  @Test
+  public void testMoneyTransfer_success() throws Exception{
+    Account accountFrom = new Account("1");
+    Account accountTo = new Account("2");
+    accountFrom.setBalance(BigDecimal.valueOf(150));
+    accountsService.createAccount(accountFrom);
+    accountsService.createAccount(accountTo);
+
+    TransferRequestDTO request = new TransferRequestDTO();
+    request.setAccountFromId(accountFrom.getAccountId());
+    request.setAccountToId(accountTo.getAccountId());
+    request.setAmount(BigDecimal.valueOf(100));
+
+    ObjectMapper objectMapper = new ObjectMapper();
+    String jsonRequest = objectMapper.writeValueAsString(request);
+
+    mockMvc.perform(post("/v1/accounts/transfer")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequest))
+            .andExpect(status().isOk())
+            .andExpect(content().string("Transfer successful"));
+  }
+
+  @Test
+  public void testMoneyTransfer_invalidAmount() throws Exception {
+    Account accountFrom = new Account("1");
+    Account accountTo = new Account("2");
+    accountFrom.setBalance(BigDecimal.valueOf(150));
+    accountsService.createAccount(accountFrom);
+    accountsService.createAccount(accountTo);
+
+    TransferRequestDTO request = new TransferRequestDTO();
+    request.setAccountFromId(accountFrom.getAccountId());
+    request.setAccountToId(accountTo.getAccountId());
+    request.setAmount(BigDecimal.valueOf(-100));  //invalid amount
+
+    ObjectMapper objectMapper = new ObjectMapper();
+    String jsonRequest = objectMapper.writeValueAsString(request);
+
+    mockMvc.perform(post("/v1/accounts/transfer")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequest))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().string("Transfer amount must be positive"));
+  }
+
+  @Test
+  public void testMoneyTransfer_insufficientBalance() throws Exception {
+    Account accountFrom = new Account("1");
+    Account accountTo = new Account("2");
+    accountFrom.setBalance(BigDecimal.valueOf(50)); //insufficient balance
+    accountsService.createAccount(accountFrom);
+    accountsService.createAccount(accountTo);
+
+    TransferRequestDTO request = new TransferRequestDTO();
+    request.setAccountFromId(accountFrom.getAccountId());
+    request.setAccountToId(accountTo.getAccountId());
+    request.setAmount(BigDecimal.valueOf(100));  //invalid result: 50-100=-50
+
+    ObjectMapper objectMapper = new ObjectMapper();
+    String jsonRequest = objectMapper.writeValueAsString(request);
+
+    mockMvc.perform(post("/v1/accounts/transfer")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(jsonRequest))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().string("Insufficient balance in account " + accountFrom.getAccountId()));
+  }
+
 }
